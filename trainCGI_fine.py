@@ -88,7 +88,7 @@ testLoader = torch.utils.data.DataLoader(testLoaderHelper,
 #sphereDirection_neg = Variable(torch.from_numpy(sphereDirection_neg).cuda()).float()
 #sphereMask = Variable(torch.from_numpy(sphereMask).cuda()).float()
 
-def getLoss(output_albedo, output_shading, output_normal, albedo, shading, normal, mask):
+def getLoss(output_albedo, output_shading, output_normal, albedo, shading, normal, mask, normalMask):
     '''
         compute the loss for the mini-batch
     '''
@@ -101,6 +101,9 @@ def getLoss(output_albedo, output_shading, output_normal, albedo, shading, norma
     
     imgMask = mask.expand(-1, 3, -1, -1)
     gradMask = mask.expand(-1, 6, -1, -1)
+
+    imgNormalMask = normalMask.expand(-1, 3, -1, -1)
+    gradNormalMask = normalMask.expand(-1, 6, -1, -1)
     
     loss_albedo = criterion(imgMask, torch.abs(albedo - output_albedo))
     loss_shading = criterion(imgMask, torch.abs(shading - output_shading))
@@ -108,9 +111,8 @@ def getLoss(output_albedo, output_shading, output_normal, albedo, shading, norma
     loss_albedo_grad = criterion(gradMask, torch.abs(albedo_grad - output_albedo_grad))
     loss_shading_grad = criterion(gradMask, torch.abs(shading_grad - output_shading_grad))
     
-    #loss_normal = criterion(mask, torch.sum(-1*output_normal*normal, dim=1, keepdim=True))
-    loss_normal = criterion(imgMask, torch.abs(output_normal - normal))
-    loss_normal_grad = criterion(gradMask, torch.abs(normal_grad - output_normal_grad))
+    loss_normal = criterion(imgNormalMask, torch.abs(output_normal - normal))
+    loss_normal_grad = criterion(gradNormalMask, torch.abs(normal_grad - output_normal_grad))
     
     return loss_albedo, loss_shading, loss_albedo_grad, loss_shading_grad, loss_normal, loss_normal_grad
 
@@ -119,13 +121,14 @@ def networkForward(data, Testing=False):
         given data, compute the loss for the network
         return loss in a list
     '''
-    inputs, albedo, shading, normal, mask = data
-    inputs, albedo, shading, normal, mask = \
+    inputs, albedo, shading, normal, mask, normalMask = data
+    inputs, albedo, shading, normal, mask, normalMask = \
             Variable(inputs.cuda(), volatile=Testing).float(), \
             Variable(albedo.cuda(), volatile=Testing).float(), \
             Variable(shading.cuda(), volatile=Testing).float(), \
             Variable(normal.cuda(), volatile=Testing).float(), \
-            Variable(mask.cuda(), volatile=Testing).float()
+            Variable(mask.cuda(), volatile=Testing).float(), \
+            Variable(normalMask.cuda(), volatile=Testing).float()
 
     # --------------------------------------------------------------------------------
     # get albedo, shading, normal, lighting in coarse scale and prepare the residual
@@ -159,7 +162,7 @@ def networkForward(data, Testing=False):
     # compute loss
     loss_albedo, loss_shading, loss_albedo_grad, loss_shading_grad, \
         loss_normal, loss_normal_grad = getLoss(true_albedo, 
-        true_shading, true_normal, albedo, shading, normal, mask)
+        true_shading, true_normal, albedo, shading, normal, mask, normalMask)
     
     # append all the losses
     loss = {}
